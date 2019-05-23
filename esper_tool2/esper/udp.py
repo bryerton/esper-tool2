@@ -174,6 +174,9 @@ class EsperUDP:
     MSG_TYPE_VAR_READ = 0x10
     MSG_TYPE_VAR_WRITE = 0x11
     MSG_TYPE_VAR_PATH = 0x12
+    MSG_TYPE_VAR_INFO = 0x13
+    MSG_TYPE_GROUP_INFO = 0x14
+    MSG_TYPE_GROUP_PATH = 0x15
     MSG_TYPE_ERROR = 0xFF
 
     # Error Codes
@@ -269,10 +272,10 @@ class EsperUDP:
                 header = header + struct.pack("<Q", self.auth_token)
 
             # Determine if we need to pad
-            payload_rem = self.payload_len % 4
+            payload_rem = self.payload_len % 8
             # Pad payload if necessary
             if(payload_rem != 0):
-                payload = self.payload + struct.pack(str(4 - payload_rem) + "x")
+                payload = self.payload + struct.pack(str(8 - payload_rem) + "x")
             else:
                 payload = self.payload
 
@@ -284,8 +287,6 @@ class EsperUDP:
 
             # Combine Header and Payload
             msg = header + payload
-
-            print(len(msg))
 
             return msg
 
@@ -438,13 +439,106 @@ class EsperUDP:
 
         self.__send_request(request)
 
-        print(request)
-
         response = self.__get_response_for_request(request)
 
         vid = struct.unpack_from("<I", response.payload, 0)
 
         return vid[0]
+
+    def get_group_id(self, path):
+        payload = struct.pack(
+            "<II" + str(len(path)) + "s",
+            len(path.encode()),  # Length of Path
+            0,  # No options
+            path.encode()
+        )
+
+        request = EsperUDP.Request(
+            self.__get_msg_id(),
+            EsperUDP.MSG_TYPE_GROUP_PATH,
+            0,
+            payload,
+            self.__auth_token
+        )
+
+        self.__send_request(request)
+
+        response = self.__get_response_for_request(request)
+
+        gid = struct.unpack_from("<I", response.payload, 0)
+
+        return gid[0]
+
+    def read_var_info(self, vid, options):
+        payload = struct.pack(
+            "<II",
+            vid,
+            options
+        )
+
+        request = EsperUDP.Request(
+            self.__get_msg_id(),
+            EsperUDP.MSG_TYPE_VAR_INFO,
+            0,
+            payload,
+            self.__auth_token
+        )
+
+        self.__send_request(request)
+
+        response = self.__get_response_for_request(request)
+
+        info = struct.unpack_from("<II32sIIIIIBB", response.payload, 0)
+
+        var = {
+            'vid': int(info[0]),
+            'gid': int(info[1]),
+            'key': info[2].decode(encoding="ascii").rstrip('\0'),
+            'ts': int(info[3]),
+            'wc': int(info[4]),
+            'type': int(info[5]),
+            'numElements': int(info[6]),
+            'maxElementsPerRequest': int(info[7]),
+            'option': int(info[8]),
+            'status': int(info[9]),
+        }
+
+        return var
+
+    def read_group_info(self, gid, options):
+        payload = struct.pack(
+            "<II",
+            gid,
+            options
+        )
+
+        request = EsperUDP.Request(
+            self.__get_msg_id(),
+            EsperUDP.MSG_TYPE_GROUP_INFO,
+            0,
+            payload,
+            self.__auth_token
+        )
+
+        self.__send_request(request)
+
+        response = self.__get_response_for_request(request)
+
+        info = struct.unpack_from("<II32sIIIIBB", response.payload, 0)
+
+        group = {
+            'vid': int(info[0]),
+            'gid': int(info[1]),
+            'key': info[2].decode(encoding="ascii").rstrip('\0'),
+            'numVars': int(info[3]),
+            'numGroups': int(info[4]),
+            'ts': int(info[5]),
+            'wc': int(info[6]),
+            'option': int(info[7]),
+            'status': int(info[8])
+        }
+
+        return group
 
     def __verify_response(self, request, response):
         if(response.msg_type == EsperUDP.MSG_TYPE_ERROR):

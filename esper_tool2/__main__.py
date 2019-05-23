@@ -83,7 +83,7 @@ def cmd_web(args):
     pass
 
 
-def cmd_read(args):
+def cmd_var_read(args):
     (auth_token, ip, port) = parse_url(args.url)
     try:
         udp = esper.udp.EsperUDP(ip, port, int(args.timeout), auth_token)
@@ -103,15 +103,24 @@ def cmd_read(args):
     except esper.udp.EsperUDP.EsperUDPLinkError as e:
         print("ESPER Link Error Received: " + str(e))
     except socket.timeout:
-        print("Timed out pinging " + ip + ":" + str(port))
+        print("Timed out waiting for response from " + ip + ":" + str(port))
     except KeyboardInterrupt:
         pass
 
 
-def cmd_write(args):
+def cmd_var_write(args):
     (auth_token, ip, port) = parse_url(args.url)
     try:
         udp = esper.udp.EsperUDP(ip, port, int(args.timeout), auth_token)
+        # If args.vid can't be converted to an integer, try it as a string
+        # Note: This involves an extra UDP request to get the VID of the path
+        try:
+            args.vid = int(args.vid)
+        except ValueError:
+            # Attempt to get the variable id of the path from the argument
+            data = udp.get_var_id(path=args.vid)
+            args.vid = data
+
         data = udp.write_var(
             vid=int(args.vid),
             offset=int(args.offset),
@@ -124,7 +133,63 @@ def cmd_write(args):
     except esper.udp.EsperUDP.EsperUDPLinkError as e:
         print("ESPER Link Error Received: " + str(e))
     except socket.timeout:
-        print("Timed out pinging " + ip + ":" + str(port))
+        print("Timed out waiting for response from " + ip + ":" + str(port))
+    except KeyboardInterrupt:
+        pass
+
+
+def cmd_var_info(args):
+    (auth_token, ip, port) = parse_url(args.url)
+    try:
+        udp = esper.udp.EsperUDP(ip, port, int(args.timeout), auth_token)
+        # If args.vid can't be converted to an integer, try it as a string
+        # Note: This involves an extra UDP request to get the VID of the path
+        try:
+            args.vid = int(args.vid)
+        except ValueError:
+            # Attempt to get the variable id of the path from the argument
+            data = udp.get_var_id(path=args.vid)
+            args.vid = data
+
+        data = udp.read_var_info(
+            vid=int(args.vid),
+            options=0
+        )
+        print(data)
+    except ConnectionRefusedError:
+        print("Connectiong Refused " + ip + ":" + str(port))
+    except esper.udp.EsperUDP.EsperUDPLinkError as e:
+        print("ESPER Link Error Received: " + str(e))
+    except socket.timeout:
+        print("Timed out waiting for response from " + ip + ":" + str(port))
+    except KeyboardInterrupt:
+        pass
+
+
+def cmd_group_info(args):
+    (auth_token, ip, port) = parse_url(args.url)
+    try:
+        udp = esper.udp.EsperUDP(ip, port, int(args.timeout), auth_token)
+        # If args.vid can't be converted to an integer, try it as a string
+        # Note: This involves an extra UDP request to get the VID of the path
+        try:
+            args.gid = int(args.gid)
+        except ValueError:
+            # Attempt to get the variable id of the path from the argument
+            data = udp.get_group_id(path=args.gid)
+            args.gid = data
+
+        data = udp.read_group_info(
+            gid=int(args.gid),
+            options=0
+        )
+        print(data)
+    except ConnectionRefusedError:
+        print("Connectiong Refused " + ip + ":" + str(port))
+    except esper.udp.EsperUDP.EsperUDPLinkError as e:
+        print("ESPER Link Error Received: " + str(e))
+    except socket.timeout:
+        print("Timed out waiting for response from " + ip + ":" + str(port))
     except KeyboardInterrupt:
         pass
 
@@ -249,13 +314,27 @@ def main():
     # Direct Write Variable Command
 
     # Direct Read Variable Command
-    parser_read = subparsers.add_parser('read', help='')
-    parser_read.add_argument("url", help="<auth@protocol://ip:port>")
-    parser_read.add_argument("vid", help="id or path")
-    parser_read.add_argument("offset", default=0, help="offset")
-    parser_read.add_argument("length", default=1, help="length")
-    parser_read.add_argument("-t", "--timeout", default=3, help="Request Timeout in Seconds")
-    parser_read.set_defaults(func=cmd_read)
+    parser_var_read = subparsers.add_parser('read', help='')
+    parser_var_read.add_argument("url", help="<auth@protocol://ip:port>")
+    parser_var_read.add_argument("vid", help="id or path")
+    parser_var_read.add_argument("offset", default=0, help="offset")
+    parser_var_read.add_argument("length", default=1, help="length")
+    parser_var_read.add_argument("-t", "--timeout", default=3, help="Request Timeout in Seconds")
+    parser_var_read.set_defaults(func=cmd_var_read)
+
+    # Direct Info Variable Command
+    parser_var_info = subparsers.add_parser('vinfo', help='')
+    parser_var_info.add_argument("url", help="<auth@protocol://ip:port>")
+    parser_var_info.add_argument("vid", help="id or path")
+    parser_var_info.add_argument("-t", "--timeout", default=3, help="Request Timeout in Seconds")
+    parser_var_info.set_defaults(func=cmd_var_info)
+
+    # Direct Info Group Command
+    parser_group_info = subparsers.add_parser('ginfo', help='')
+    parser_group_info.add_argument("url", help="<auth@protocol://ip:port>")
+    parser_group_info.add_argument("gid", help="id or path")
+    parser_group_info.add_argument("-t", "--timeout", default=3, help="Request Timeout in Seconds")
+    parser_group_info.set_defaults(func=cmd_group_info)
 
     # Direct File Upload (multiple write calls)
 
