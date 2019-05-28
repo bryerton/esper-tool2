@@ -177,6 +177,7 @@ class EsperUDP:
     MSG_TYPE_VAR_INFO = 0x13
     MSG_TYPE_GROUP_INFO = 0x14
     MSG_TYPE_GROUP_PATH = 0x15
+    MSG_TYPE_ENDPOINT_INFO = 0x16
     MSG_TYPE_ERROR = 0xFF
 
     # Error Codes
@@ -527,8 +528,8 @@ class EsperUDP:
         info = struct.unpack_from("<II32sIIIIBB", response.payload, 0)
 
         group = {
-            'vid': int(info[0]),
-            'gid': int(info[1]),
+            'gid': int(info[0]),
+            'pid': int(info[1]),  # Parent Group Id
             'key': info[2].decode(encoding="ascii").rstrip('\0'),
             'numVars': int(info[3]),
             'numGroups': int(info[4]),
@@ -539,6 +540,47 @@ class EsperUDP:
         }
 
         return group
+
+    def read_endpoint_info(self, options):
+        payload = struct.pack(
+            "<I",
+            options
+        )
+
+        request = EsperUDP.Request(
+            self.__get_msg_id(),
+            EsperUDP.MSG_TYPE_ENDPOINT_INFO,
+            0,
+            payload,
+            self.__auth_token
+        )
+
+        self.__send_request(request)
+
+        response = self.__get_response_for_request(request)
+
+        info = struct.unpack_from("<128s64s64s32sIIIiiIIIIIIB", response.payload, 0)
+
+        endpoint = {
+            'hardwareId': info[0].decode(encoding="ascii").rstrip('\0'),
+            'deviceType': info[1].decode(encoding="ascii").rstrip('\0'),
+            'deviceName': info[2].decode(encoding="ascii").rstrip('\0'),
+            'deviceRev': info[3].decode(encoding="ascii").rstrip('\0'),
+            'uptime': int(info[4]),
+            'tickCount': int(info[5]),
+            'deviceId': int(info[6]),
+            'logLevel': int(info[7]),
+            'alarmLevel': int(info[8]),
+            'logId': int(info[9]),
+            'numModules': int(info[10]),
+            'numVars': int(info[11]),
+            'numStorableVars': int(info[12]),
+            'numGroups': int(info[13]),
+            'numAlarms': int(info[14]),
+            'api_version': int(info[15])
+        }
+
+        return endpoint
 
     def __verify_response(self, request, response):
         if(response.msg_type == EsperUDP.MSG_TYPE_ERROR):

@@ -7,6 +7,7 @@ import webbrowser
 import socket
 import esper.udp
 import struct
+import esper_console
 
 # Version information is gathered using setup_scm
 try:
@@ -76,7 +77,19 @@ def parse_url(url, default_port=esper.udp.EsperUDP.ESPER_UDP_DEFAULT_PORT, defau
 
 
 def cmd_console(args):
-    pass
+    (auth_token, ip, port) = parse_url(args.url)
+    try:
+        udp = esper.udp.EsperUDP(ip, port, int(args.timeout), auth_token)
+        console = esper_console.InteractiveMode(udp)
+        console.cmdloop()
+    except ConnectionRefusedError:
+        print("Connectiong Refused " + ip + ":" + str(port))
+    except esper.udp.EsperUDP.EsperUDPLinkError as e:
+        print("ESPER Link Error Received: " + str(e))
+    except socket.timeout:
+        print("Timed out waiting for response from " + ip + ":" + str(port))
+    except KeyboardInterrupt:
+        pass
 
 
 def cmd_web(args):
@@ -194,6 +207,25 @@ def cmd_group_info(args):
         pass
 
 
+def cmd_endpoint_info(args):
+    (auth_token, ip, port) = parse_url(args.url)
+    try:
+        udp = esper.udp.EsperUDP(ip, port, int(args.timeout), auth_token)
+
+        data = udp.read_endpoint_info(
+            options=0
+        )
+        print(data)
+    except ConnectionRefusedError:
+        print("Connectiong Refused " + ip + ":" + str(port))
+    except esper.udp.EsperUDP.EsperUDPLinkError as e:
+        print("ESPER Link Error Received: " + str(e))
+    except socket.timeout:
+        print("Timed out waiting for response from " + ip + ":" + str(port))
+    except KeyboardInterrupt:
+        pass
+
+
 def cmd_ping(args):
     args.count = int(args.count)
     if(args.count > 1024):
@@ -273,7 +305,10 @@ def cmd_discover(args):
             (days, remainder) = divmod(s, (3600 * 24))
             (hours, remainder) = divmod(s, 3600)
             (minutes, seconds) = divmod(remainder, 60)
-            str_uptime = '{:03}d {:02}h {:02}m {:02}s'.format(int(days), int(hours), int(minutes), int(seconds))
+            if(int(days) > 0):
+                str_uptime = '{:03}d {:02}h {:02}m {:02}s'.format(int(days), int(hours), int(minutes), int(seconds))
+            else:
+                str_uptime = '{:02}h {:02}m {:02}s'.format(int(hours), int(minutes), int(seconds))
 
             # Pretty print the found device
             print("%s Rev.%s Module %s\n\tIP: %s \n\tHardware Id: %s\n\tStarted %s (%s)\n" % (
@@ -302,20 +337,21 @@ def main():
     subparsers = parser.add_subparsers(title='commands', dest='command', description='Available Commands', help='', metavar='Type ' + prog + ' [command] -h to see additional options')
 
     # Console Mode
-    parser_console = subparsers.add_parser('console', help='<auth@<protocol://ip:port>')
+    parser_console = subparsers.add_parser('console', help='<auth@<ip:port>')
+    parser_console.add_argument("url", help="<auth@ip:port>")
     parser_console.add_argument("-t", "--timeout", default=3, help="Request Timeout in Seconds")
     parser_console.set_defaults(func=cmd_console)
 
     # Web Mode
     parser_web = subparsers.add_parser('web', help='')
-    parser_web.add_argument("url", help="<auth@<protocol://ip:port>")
+    parser_web.add_argument("url", help="<auth@ip:port>")
     parser_web.set_defaults(func=cmd_web)
 
     # Direct Write Variable Command
 
     # Direct Read Variable Command
     parser_var_read = subparsers.add_parser('read', help='')
-    parser_var_read.add_argument("url", help="<auth@protocol://ip:port>")
+    parser_var_read.add_argument("url", help="<auth@ip:port>")
     parser_var_read.add_argument("vid", help="id or path")
     parser_var_read.add_argument("offset", default=0, help="offset")
     parser_var_read.add_argument("length", default=1, help="length")
@@ -324,24 +360,30 @@ def main():
 
     # Direct Info Variable Command
     parser_var_info = subparsers.add_parser('vinfo', help='')
-    parser_var_info.add_argument("url", help="<auth@protocol://ip:port>")
+    parser_var_info.add_argument("url", help="<auth@ip:port>")
     parser_var_info.add_argument("vid", help="id or path")
     parser_var_info.add_argument("-t", "--timeout", default=3, help="Request Timeout in Seconds")
     parser_var_info.set_defaults(func=cmd_var_info)
 
     # Direct Info Group Command
     parser_group_info = subparsers.add_parser('ginfo', help='')
-    parser_group_info.add_argument("url", help="<auth@protocol://ip:port>")
+    parser_group_info.add_argument("url", help="<auth@ip:port>")
     parser_group_info.add_argument("gid", help="id or path")
     parser_group_info.add_argument("-t", "--timeout", default=3, help="Request Timeout in Seconds")
     parser_group_info.set_defaults(func=cmd_group_info)
+
+    # Direct Info Endpoint Command
+    parser_endpoint_info = subparsers.add_parser('einfo', help='')
+    parser_endpoint_info.add_argument("url", help="<auth@ip:port>")
+    parser_endpoint_info.add_argument("-t", "--timeout", default=3, help="Request Timeout in Seconds")
+    parser_endpoint_info.set_defaults(func=cmd_endpoint_info)
 
     # Direct File Upload (multiple write calls)
 
     # Direct File Download (multiple read calls)
 
     # Ping Request (alive)
-    parser_ping = subparsers.add_parser('ping', help='<auth@<protocol://ip:port>')
+    parser_ping = subparsers.add_parser('ping', help='<auth@<ip:port>')
     parser_ping.add_argument("url", help="")
     parser_ping.add_argument("-s", "--size", default=64, help="Number of bytes to send")
     parser_ping.add_argument("-c", "--count", default=1, help="Count")
