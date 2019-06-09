@@ -13,7 +13,7 @@ setup(
    long_description_content_type="text/markdown",
    url="https://github.com/bryerton/esper-tool2",
    use_scm_version=True,
-   setup_requires=['setuptools_scm',"pytest-runner"],
+   setup_requires=['setuptools_scm', 'pytest-runner'],
    classifiers=[
       # How mature is this project? Common values are
       #   3 - Alpha
@@ -24,8 +24,7 @@ setup(
       # Indicate who your project is intended for
       'Intended Audience :: Science/Research',
       'Environment :: Console',
-      'Topic :: System :: Networking',       
-      "Programming Language :: Python :: 3",
+      'Topic :: System :: Networking',
       "License :: OSI Approved :: MIT License",
       "Operating System :: OS Independent",
       # Specify the Python versions you support here. In particular, ensure
@@ -35,7 +34,7 @@ setup(
    ],
    keywords='esper monitoring control experiments',
    tests_require=["pytest"],
-   
+
    # You can just specify the packages manually here if your project is
    # simple. Or you can use find_packages().
    packages=find_packages(),
@@ -48,7 +47,7 @@ setup(
    # your project is installed. For an analysis of "install_requires" vs pip's
    # requirements files see:
    # https://packaging.python.org/en/latest/requirements.html
-   install_requires=['requests', 'argparse', 'zlib', 'future'],
+   install_requires=['requests', 'datetime', 'ipaddress', 'futures'],
 
    # List additional groups of dependencies here (e.g. development
    # dependencies). You can install these using the following syntax,
@@ -77,7 +76,7 @@ setup(
    # pip to create the appropriate form of executable for the target platform.
    entry_points={
       'console_scripts': [
-         'esper-tool2 = esper_tool2.__main__:main'
+         'esper-tool2 = esper_tool2.esper_tool2:main'
       ]
    }
 )

@@ -1,5 +1,0 @@
-
-
-
-class EsperException(Exception):
-    pass
