@@ -8,22 +8,25 @@ from array import array
 
 UDP_VERSION = 0
 
-VAR_TYPE_NULL = 0
-VAR_TYPE_ASCII = 1
-VAR_TYPE_BOOL = 2
-VAR_TYPE_UINT8 = 3
-VAR_TYPE_UINT16 = 4
-VAR_TYPE_UINT32 = 5
-VAR_TYPE_UINT64 = 6
-VAR_TYPE_INT8 = 7
-VAR_TYPE_INT16 = 8
-VAR_TYPE_INT32 = 9
-VAR_TYPE_INT64 = 10
-VAR_TYPE_FLOAT32 = 11
-VAR_TYPE_FLOAT64 = 12
+VAR_TYPE_UNKNOWN = 0
+VAR_TYPE_NULL = 1
+VAR_TYPE_ASCII = 2
+VAR_TYPE_BOOL = 3
+VAR_TYPE_UINT8 = 4
+VAR_TYPE_UINT16 = 5
+VAR_TYPE_UINT32 = 6
+VAR_TYPE_UINT64 = 7
+VAR_TYPE_INT8 = 8
+VAR_TYPE_INT16 = 9
+VAR_TYPE_INT32 = 10
+VAR_TYPE_INT64 = 11
+VAR_TYPE_FLOAT32 = 12
+VAR_TYPE_FLOAT64 = 13
 
 
 def EsperGetTypeSize(type):
+    if(type == VAR_TYPE_UNKNOWN):
+        return 0
     if(type == VAR_TYPE_NULL):
         return 0
     if(type == VAR_TYPE_ASCII):
@@ -51,6 +54,7 @@ def EsperGetTypeSize(type):
     if(type == VAR_TYPE_FLOAT64):
         return 8
 
+    return 0
 
 def send_discovery(deviceId, deviceName, deviceType, deviceRev, hardwareId, authToken, timeout=3, verbose=False):
     """Send a discovery packet and gather responses"""
@@ -340,6 +344,9 @@ class EsperUDP:
                 self.payload_crc = 0
                 self.computed_payload_crc = 0
 
+        def __repr__(self):
+            return { 'msg_id': self.msg_id, 'msg_type': self.msg_type, 'msg_options': self.msg_options, 'payload': self.payload, 'payload_len': self.payload_len }
+
         def __str__(self):
             return str(self.payload_len)
 
@@ -381,31 +388,44 @@ class EsperUDP:
 
         return True
 
-    def write_var(self, vid, offset, num_elements, data, var_type=0):
 
-        if(var_type == 0):
-            msg_option = 0x1
-        else:
-            msg_option = 0
+    def get_var_types_available_for_data(self, data):
+        """Attempt to determine var_type from dat"""
 
-        # Attempt to determine var_type from data
+        # Verify every element in data is the same type
+        prev_type = type(data[0])
+        for elem in data:
+            cur_type = type(elem)
+            if(cur_type != prev_type):
+                return []
+            prev_type = cur_type
+
+        # JSON Null should be converted to None
+        if(isinstance(data[0], type(None))):
+            return [VAR_TYPE_NULL]
 
         # Bool is easy
         if(isinstance(data[0], bool)):
-            var_type = VAR_TYPE_BOOL
+            return [VAR_TYPE_BOOL]
 
         # String isn't hard
         elif(isinstance(data[0], str)):
-            var_type = VAR_TYPE_ASCII
+            return [VAR_TYPE_ASCII]
 
         # Check float fits inside a 'float' vs 'double' in C
         elif(isinstance(data[0], float)):
-            var_type = VAR_TYPE_FLOAT32
+            min_val = 0
+            max_val = 0
             for elem in data:
-                if(elem > 340000000000000000000000000000000000000.0):
-                    var_type = VAR_TYPE_FLOAT64
-                elif(elem < -120000000000000000000000000000000000000.0):
-                    var_type = VAR_TYPE_FLOAT64
+                if(elem < min_val):
+                    min_val = elem
+                if(elem > max_val):
+                    max_val = elem
+
+            if((max_val >= 340000000000000000000000000000000000000.0) and (min_val <= -120000000000000000000000000000000000000.0)):
+                return [VAR_TYPE_FLOAT64]
+            else:
+                return [VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
 
         # Integer, we have to test if any of the numbers are negative
         elif(isinstance(data[0], int)):
@@ -422,22 +442,57 @@ class EsperUDP:
                     max_val = elem
 
             # Determine required integer size and type based on min/max and signage
-            if(not is_signed):
-                var_type = VAR_TYPE_UINT8
-                if(max_val > 255):
-                    var_type = VAR_TYPE_UINT16
-                if(max_val > 65535):
-                    var_type = VAR_TYPE_UINT32
-                if(max_val > 4294967295):
-                    var_type = VAR_TYPE_UINT64
-            else:
-                var_type = VAR_TYPE_INT8
-                if(max_val > 127) or (min_val < -128):
-                    var_type = VAR_TYPE_UINT16
-                if(max_val > 32767) or (min_val < -32768):
-                    var_type = VAR_TYPE_UINT32
+
+            # Signed number, can only be represented by float or signed integer
+            if(is_signed):
                 if(max_val > 2147483647) or (min_val < -2147483648):
-                    var_type = VAR_TYPE_UINT64
+                    return [VAR_TYPE_INT64, VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                if(max_val > 32767) or (min_val < -32768):
+                    return [VAR_TYPE_INT32, VAR_TYPE_INT64, VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                if(max_val > 127) or (min_val < -128):
+                    return [VAR_TYPE_INT16, VAR_TYPE_INT32, VAR_TYPE_INT64, VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                
+                return [VAR_TYPE_INT8, VAR_TYPE_INT16, VAR_TYPE_INT32, VAR_TYPE_INT64, VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+            # Unsigned number, only max matters, min = zero
+            else:
+                if(max_val > 9223372036854775807):
+                    return [VAR_TYPE_UINT64, 
+                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                if(max_val > 4294967295):
+                    return [VAR_TYPE_INT64, 
+                            VAR_TYPE_UINT64, 
+                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                if(max_val > 2147483647):
+                    return [VAR_TYPE_INT64, 
+                            VAR_TYPE_UINT32, VAR_TYPE_UINT64, 
+                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                if(max_val > 65535):
+                    return [VAR_TYPE_INT32, VAR_TYPE_INT64, 
+                            VAR_TYPE_UINT32, VAR_TYPE_UINT64, 
+                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                if(max_val > 32767):
+                    return [VAR_TYPE_INT32, VAR_TYPE_INT64, 
+                            VAR_TYPE_UINT16, VAR_TYPE_UINT32, VAR_TYPE_UINT64, 
+                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                if(max_val > 255):
+                    return [VAR_TYPE_INT16, VAR_TYPE_INT32, VAR_TYPE_INT64, 
+                            VAR_TYPE_UINT16, VAR_TYPE_UINT32, VAR_TYPE_UINT64, 
+                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                if(max_val > 127):
+                    return [VAR_TYPE_INT16, VAR_TYPE_INT32, VAR_TYPE_INT64, 
+                            VAR_TYPE_UINT8, VAR_TYPE_UINT16, VAR_TYPE_UINT32, VAR_TYPE_UINT64, 
+                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+
+                return [VAR_TYPE_INT8, VAR_TYPE_INT16, VAR_TYPE_INT32, VAR_TYPE_INT64, 
+                        VAR_TYPE_UINT8, VAR_TYPE_UINT16, VAR_TYPE_UINT32, VAR_TYPE_UINT64, 
+                        VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+
+        return []
+
+
+    def write_var(self, vid, offset, num_elements, data, var_type):
+
+        msg_option = 0
 
         header_payload = struct.pack(
             "<IIIIII",
@@ -455,27 +510,27 @@ class EsperUDP:
         if(var_type == VAR_TYPE_ASCII):
             data_payload = struct.pack("<" + str(num_elements) + "s", data)
         if(var_type == VAR_TYPE_BOOL):
-            data_payload = struct.pack("<" + str(num_elements) + "?", array('B', data))
+            data_payload = struct.pack("<" + str(num_elements) + "?", *array('B', data))
         if(var_type == VAR_TYPE_UINT8):
-            data_payload = struct.pack("<" + str(num_elements) + "B", array('B', data))
+            data_payload = struct.pack("<" + str(num_elements) + "B", *array('B', data))
         if(var_type == VAR_TYPE_UINT16):
-            data_payload = struct.pack("<" + str(num_elements) + "H", array('H', data))
+            data_payload = struct.pack("<" + str(num_elements) + "H", *array('H', data))
         if(var_type == VAR_TYPE_UINT32):
-            data_payload = struct.pack("<" + str(num_elements) + "I", array('I', data))
+            data_payload = struct.pack("<" + str(num_elements) + "I", *array('I', data))
         if(var_type == VAR_TYPE_UINT64):
-            data_payload = struct.pack("<" + str(num_elements) + "Q", array('Q', data))
+            data_payload = struct.pack("<" + str(num_elements) + "Q", *array('Q', data))
         if(var_type == VAR_TYPE_INT8):
-            data_payload = struct.pack("<" + str(num_elements) + "b", array('b', data))
+            data_payload = struct.pack("<" + str(num_elements) + "b", *array('b', data))
         if(var_type == VAR_TYPE_INT16):
-            data_payload = struct.pack("<" + str(num_elements) + "h", array('h', data))
+            data_payload = struct.pack("<" + str(num_elements) + "h", *array('h', data))
         if(var_type == VAR_TYPE_INT32):
-            data_payload = struct.pack("<" + str(num_elements) + "i", array('i', data))
+            data_payload = struct.pack("<" + str(num_elements) + "i", *array('i', data))
         if(var_type == VAR_TYPE_INT64):
-            data_payload = struct.pack("<" + str(num_elements) + "q", array('q', data))
+            data_payload = struct.pack("<" + str(num_elements) + "q", *array('q', data))
         if(var_type == VAR_TYPE_FLOAT32):
-            data_payload = struct.pack("<" + str(num_elements) + "f", array('f', data))
+            data_payload = struct.pack("<" + str(num_elements) + "f", *array('f', data))
         if(var_type == VAR_TYPE_FLOAT64):
-            data_payload = struct.pack("<" + str(num_elements) + "d", array('d', data))
+            data_payload = struct.pack("<" + str(num_elements) + "d", *array('d', data))
 
         # Determine if we need to pad data payload
         payload_rem = len(data_payload) % 8
@@ -533,42 +588,50 @@ class EsperUDP:
         offset = 0
         while(n == 0):
             section = struct.unpack_from("<IiIHH", response.payload, offset)
-            data_len = section[3] * EsperGetTypeSize(section[4])
+            
+            vid = section[0]
+            err = section[1]
+            read_offset = section[2]
+            num_elements = section[3]
+            var_type = section[4]
+
+            print(len(response.payload))
+
+            data_len = num_elements * EsperGetTypeSize(var_type)
             # TODO: Make this into a read_var class response
             offset = offset + 16
-            if(section[4] == VAR_TYPE_NULL):
+            if(var_type == VAR_TYPE_NULL):
                 data = []
-            if(section[4] == VAR_TYPE_ASCII):
-                data = struct.unpack_from("<" + str(section[3]) + "s", response.payload, offset)[0].decode(encoding="ascii").rstrip('\0')
-            if(section[4] == VAR_TYPE_BOOL):
-                data = list(struct.unpack_from("<" + str(section[3]) + "?", response.payload, offset))
-            if(section[4] == VAR_TYPE_UINT8):
-                data = list(struct.unpack_from("<" + str(section[3]) + "B", response.payload, offset))
-            if(section[4] == VAR_TYPE_UINT16):
-                data = list(struct.unpack_from("<" + str(section[3]) + "H", response.payload, offset))
-            if(section[4] == VAR_TYPE_UINT32):
-                data = list(struct.unpack_from("<" + str(section[3]) + "I", response.payload, offset))
-            if(section[4] == VAR_TYPE_UINT64):
-                data = list(struct.unpack_from("<" + str(section[3]) + "Q", response.payload, offset))
-            if(section[4] == VAR_TYPE_INT8):
-                data = list(struct.unpack_from("<" + str(section[3]) + "b", response.payload, offset))
-            if(section[4] == VAR_TYPE_INT16):
-                data = list(struct.unpack_from("<" + str(section[3]) + "h", response.payload, offset))
-            if(section[4] == VAR_TYPE_INT32):
-                data = list(struct.unpack_from("<" + str(section[3]) + "i", response.payload, offset))
-            if(section[4] == VAR_TYPE_INT64):
-                data = list(struct.unpack_from("<" + str(section[3]) + "q", response.payload, offset))
-            if(section[4] == VAR_TYPE_FLOAT32):
-                data = list(struct.unpack_from("<" + str(section[3]) + "f", response.payload, offset))
-            if(section[4] == VAR_TYPE_FLOAT64):
-                data = list(struct.unpack_from("<" + str(section[3]) + "d", response.payload, offset))
-
+            if(var_type == VAR_TYPE_ASCII):
+                data = struct.unpack_from("<" + str(num_elements) + "s", response.payload, offset)[0].decode(encoding="ascii").rstrip('\0')
+            if(var_type == VAR_TYPE_BOOL):
+                data = list(struct.unpack_from("<" + str(num_elements) + "?", response.payload, offset))
+            if(var_type == VAR_TYPE_UINT8):
+                data = list(struct.unpack_from("<" + str(num_elements) + "B", response.payload, offset))
+            if(var_type == VAR_TYPE_UINT16):
+                data = list(struct.unpack_from("<" + str(num_elements) + "H", response.payload, offset))
+            if(var_type == VAR_TYPE_UINT32):
+                data = list(struct.unpack_from("<" + str(num_elements) + "I", response.payload, offset))
+            if(var_type == VAR_TYPE_UINT64):
+                data = list(struct.unpack_from("<" + str(num_elements) + "Q", response.payload, offset))
+            if(var_type == VAR_TYPE_INT8):
+                data = list(struct.unpack_from("<" + str(num_elements) + "b", response.payload, offset))
+            if(var_type == VAR_TYPE_INT16):
+                data = list(struct.unpack_from("<" + str(num_elements) + "h", response.payload, offset))
+            if(var_type == VAR_TYPE_INT32):
+                data = list(struct.unpack_from("<" + str(num_elements) + "i", response.payload, offset))
+            if(var_type == VAR_TYPE_INT64):
+                data = list(struct.unpack_from("<" + str(num_elements) + "q", response.payload, offset))
+            if(var_type == VAR_TYPE_FLOAT32):
+                data = list(struct.unpack_from("<" + str(num_elements) + "f", response.payload, offset))
+            if(var_type == VAR_TYPE_FLOAT64):
+                data = list(struct.unpack_from("<" + str(num_elements) + "d", response.payload, offset))
             resp.append({
-                'id': section[0],
-                'err': section[1],
-                'offset': section[2],
-                'elements': section[3],
-                'type': section[4],
+                'id': vid,
+                'err': err,
+                'offset': read_offset,
+                'elements': num_elements,
+                'type': var_type,
                 'data': data
             })
 
@@ -738,14 +801,14 @@ class EsperUDP:
         return endpoint
 
     def __verify_response(self, request, response):
+        if(request.msg_id != response.msg_id):
+            return None
+
         if(response.msg_type == EsperUDP.MSG_TYPE_ERROR):
             raise EsperUDP.EsperUDPLinkError(struct.unpack("<i", response.payload)[0])
 
-        if(request.msg_id != response.msg_id):
-            raise EsperUDP.EsperUDPLinkError(EsperUDP.ERR_MISMATCHED_REQ_REP)
-
         if(request.msg_type != response.msg_type):
-            raise EsperUDP.EsperUDPLinkError(EsperUDP.ERR_MISMATCHED_REQ_REP)
+            raise EsperUDP.EsperUDPLinkError(EsperUDP.ERR_BAD_MSG_TYPE)
 
         return response
 
@@ -760,13 +823,17 @@ class EsperUDP:
                 data, server = self.__client.recvfrom(1500)
             except socket.timeout:
                 raise EsperUDP.EsperUDPTimeout()
-
-            try:
-                resp = self.__verify_response(request, EsperUDP.Response(data))
-                print(EsperUDP.Response(data))
+            
+            # Check response is not None (mismatched msg id)
+            resp = self.__verify_response(request, EsperUDP.Response(data))
+            if(resp != None):
                 return resp
-            except EsperUDP.EsperUDPLinkError as e:
-                retry = retry + 1
+
+            # Message was None, aka 'not the message we were waiting for'
+            # Try again
+            retry = retry + 1
+
+        raise EsperUDP.EsperUDPTimeout()
 
     def __wait_for_msgs(self, num_msg_expected=1):
         # Wait for response(s)

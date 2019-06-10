@@ -100,7 +100,7 @@ def cmd_var_read(args):
             data = udp.get_var_id(path=args.vid)
             args.vid = data
 
-        resp = udp.read_var(vid=int(args.vid), offset=int(args.offset), num_elements=int(args.length))
+        resp = udp.read_var(vid=int(args.vid), offset=int(args.offset), num_elements=int(args.num_elements))
         print(resp[0]['data'])
     except ConnectionRefusedError:
         print("Connectiong Refused " + ip + ":" + str(port))
@@ -122,26 +122,34 @@ def cmd_var_write(args):
             args.vid = int(args.vid)
         except ValueError:
             # Attempt to get the variable id of the path from the argument
-            data = udp.get_var_id(path=args.vid)
-            args.vid = data
+            args.vid = int(udp.get_var_id(path=args.vid))
 
-        try:
-            json_data = json.loads(args.data)
-            # If a single element is passed in, lets make it an array
-            if(not isinstance(json_data, list)):
-                json_data = [json_data]
+        json_data = json.loads(args.data)
+        # If a single element is passed in, lets make it an array
+        if(not isinstance(json_data, list)):
+            json_data = [json_data]
 
-            resp = udp.write_var(
-                vid=int(args.vid),
-                offset=int(args.offset),
-                num_elements=len(json_data),
-                data=json_data
-            )
-            print(resp)
-        except Exception as e:
-            print('Malformed JSON Data')
-            print(e)
-            raise e
+        var_type_list = udp.get_var_types_available_for_data(json_data)
+        var_info = udp.read_var_info(args.vid, 0)
+
+        # Make sure the var data type is in the list of
+        # data types that can represent the data to write
+        if(not var_info['type'] in var_type_list):
+            print("Type mismatch")
+            return
+
+        resp = udp.write_var(
+            vid=args.vid,
+            offset=int(args.offset),
+            num_elements=len(json_data),
+            data=json_data,
+            var_type=var_info['type']
+        )
+        print(resp)
+
+    except json.decoder.JSONDecodeError:
+        print('Malformed JSON Data')
+        return
 
     except ConnectionRefusedError:
         print("Connectiong Refused " + ip + ":" + str(port))
@@ -347,7 +355,7 @@ def main():
     subparsers = parser.add_subparsers(title='commands', dest='command', description='Available Commands', help='', metavar='Type ' + prog + ' [command] -h to see additional options')
 
     # Console Mode
-    parser_console = subparsers.add_parser('console', help='<auth@<ip:port>')
+    parser_console = subparsers.add_parser('console', help='')
     parser_console.add_argument("url", help="<auth@ip:port>")
     parser_console.add_argument("-t", "--timeout", default=3, help="Request Timeout in Seconds")
     parser_console.set_defaults(func=cmd_console)
@@ -361,8 +369,8 @@ def main():
     parser_var_write = subparsers.add_parser('write', help='')
     parser_var_write.add_argument("url", help="<auth@ip:port>")
     parser_var_write.add_argument("vid", help="id or path")
-    parser_var_write.add_argument("offset", default=0, help="offset")
     parser_var_write.add_argument("data", help="data")
+    parser_var_write.add_argument("offset", nargs='?', default=0, help="offset")
     parser_var_write.add_argument("-t", "--timeout", default=3, help="Request Timeout in Seconds")
     parser_var_write.set_defaults(func=cmd_var_write)
 
@@ -370,8 +378,8 @@ def main():
     parser_var_read = subparsers.add_parser('read', help='')
     parser_var_read.add_argument("url", help="<auth@ip:port>")
     parser_var_read.add_argument("vid", help="id or path")
-    parser_var_read.add_argument("offset", default=0, help="offset")
-    parser_var_read.add_argument("length", default=1, help="length")
+    parser_var_read.add_argument("offset", nargs='?', default=0, help="offset")
+    parser_var_read.add_argument("num_elements", nargs='?', default=0, help="num_elements")
     parser_var_read.add_argument("-t", "--timeout", default=3, help="Request Timeout in Seconds")
     parser_var_read.set_defaults(func=cmd_var_read)
 
@@ -400,7 +408,7 @@ def main():
     # Direct File Download (multiple read calls)
 
     # Ping Request (alive)
-    parser_ping = subparsers.add_parser('ping', help='<auth@<ip:port>')
+    parser_ping = subparsers.add_parser('ping', help='')
     parser_ping.add_argument("url", help="")
     parser_ping.add_argument("-s", "--size", default=64, help="Number of bytes to send")
     parser_ping.add_argument("-c", "--count", default=1, help="Count")

@@ -176,7 +176,7 @@ class InteractiveMode(cmd.Cmd):
         return result
 
     def do_ls(self, line):
-        """Purpose: Read module variable(s)\nUsage: ls <path>\n"""
+        """Purpose: List groups and variables\nUsage: ls <path>\n"""
         result = []
         gid = 0
         if(len(line.strip()) != 0):
@@ -233,8 +233,9 @@ class InteractiveMode(cmd.Cmd):
         vid = self.get_vid_from_path(line.strip())
         if(vid != 0):
             var = self.var[vid]
-            # print(var)
             try:
+                print(vid)
+                print(var)
                 resp = self.connection.read_var(vid, 0, var['numElements'])
                 print(resp[0]['data'])
             except self.connection.EsperUDPTimeout:
