@@ -29,7 +29,6 @@ setup(
       "Operating System :: OS Independent",
       # Specify the Python versions you support here. In particular, ensure
       # that you indicate whether you support Python 2, Python 3 or both.
-      'Programming Language :: Python :: 2',
       'Programming Language :: Python :: 3',
    ],
    keywords='esper monitoring control experiments',
@@ -37,7 +36,8 @@ setup(
 
    # You can just specify the packages manually here if your project is
    # simple. Or you can use find_packages().
-   packages=find_packages(),
+   packages=find_packages('src'),
+   package_dir={'': 'src'},
 
    # Alternatively, if you want to distribute just a my_module.py, uncomment
    # this:
@@ -61,9 +61,7 @@ setup(
    # If there are data files included in your packages that need to be
    # installed, specify them here.  If using Python 2.6 or less, then these
    # have to be included in MANIFEST.in as well.
-   package_data={
-      'esper_tool2': [],
-   },
+   include_package_data=True,
 
    # Although 'package_data' is the preferred approach, in some case you may
    # need to place data files outside of your packages. See:
@@ -76,7 +74,7 @@ setup(
    # pip to create the appropriate form of executable for the target platform.
    entry_points={
       'console_scripts': [
-         'esper-tool2 = esper_tool2.esper_tool2:main'
+         'esper-tool2 = espertool.cli:main'
       ]
    }
 )

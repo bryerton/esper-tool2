@@ -5,56 +5,10 @@ import zlib
 import ipaddress
 import random
 from array import array
+from espertool import esper
 
 UDP_VERSION = 0
 
-VAR_TYPE_UNKNOWN = 0
-VAR_TYPE_NULL = 1
-VAR_TYPE_ASCII = 2
-VAR_TYPE_BOOL = 3
-VAR_TYPE_UINT8 = 4
-VAR_TYPE_UINT16 = 5
-VAR_TYPE_UINT32 = 6
-VAR_TYPE_UINT64 = 7
-VAR_TYPE_INT8 = 8
-VAR_TYPE_INT16 = 9
-VAR_TYPE_INT32 = 10
-VAR_TYPE_INT64 = 11
-VAR_TYPE_FLOAT32 = 12
-VAR_TYPE_FLOAT64 = 13
-
-
-def EsperGetTypeSize(type):
-    if(type == VAR_TYPE_UNKNOWN):
-        return 0
-    if(type == VAR_TYPE_NULL):
-        return 0
-    if(type == VAR_TYPE_ASCII):
-        return 1
-    if(type == VAR_TYPE_BOOL):
-        return 1
-    if(type == VAR_TYPE_UINT8):
-        return 1
-    if(type == VAR_TYPE_UINT16):
-        return 2
-    if(type == VAR_TYPE_UINT32):
-        return 4
-    if(type == VAR_TYPE_UINT64):
-        return 8
-    if(type == VAR_TYPE_INT8):
-        return 1
-    if(type == VAR_TYPE_INT16):
-        return 2
-    if(type == VAR_TYPE_INT32):
-        return 4
-    if(type == VAR_TYPE_INT64):
-        return 8
-    if(type == VAR_TYPE_FLOAT32):
-        return 4
-    if(type == VAR_TYPE_FLOAT64):
-        return 8
-
-    return 0
 
 def send_discovery(deviceId, deviceName, deviceType, deviceRev, hardwareId, authToken, timeout=3, verbose=False):
     """Send a discovery packet and gather responses"""
@@ -345,7 +299,7 @@ class EsperUDP:
                 self.computed_payload_crc = 0
 
         def __repr__(self):
-            return { 'msg_id': self.msg_id, 'msg_type': self.msg_type, 'msg_options': self.msg_options, 'payload': self.payload, 'payload_len': self.payload_len }
+            return {'msg_id': self.msg_id, 'msg_type': self.msg_type, 'msg_options': self.msg_options, 'payload': self.payload, 'payload_len': self.payload_len}
 
         def __str__(self):
             return str(self.payload_len)
@@ -388,7 +342,6 @@ class EsperUDP:
 
         return True
 
-
     def get_var_types_available_for_data(self, data):
         """Attempt to determine var_type from dat"""
 
@@ -402,15 +355,15 @@ class EsperUDP:
 
         # JSON Null should be converted to None
         if(isinstance(data[0], type(None))):
-            return [VAR_TYPE_NULL]
+            return [esper.VAR_TYPE_NULL]
 
         # Bool is easy
         if(isinstance(data[0], bool)):
-            return [VAR_TYPE_BOOL]
+            return [esper.VAR_TYPE_BOOL]
 
         # String isn't hard
         elif(isinstance(data[0], str)):
-            return [VAR_TYPE_ASCII]
+            return [esper.VAR_TYPE_ASCII]
 
         # Check float fits inside a 'float' vs 'double' in C
         elif(isinstance(data[0], float)):
@@ -423,9 +376,9 @@ class EsperUDP:
                     max_val = elem
 
             if((max_val >= 340000000000000000000000000000000000000.0) and (min_val <= -120000000000000000000000000000000000000.0)):
-                return [VAR_TYPE_FLOAT64]
+                return [esper.VAR_TYPE_FLOAT64]
             else:
-                return [VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                return [esper.VAR_TYPE_FLOAT32, esper.VAR_TYPE_FLOAT64]
 
         # Integer, we have to test if any of the numbers are negative
         elif(isinstance(data[0], int)):
@@ -446,49 +399,48 @@ class EsperUDP:
             # Signed number, can only be represented by float or signed integer
             if(is_signed):
                 if(max_val > 2147483647) or (min_val < -2147483648):
-                    return [VAR_TYPE_INT64, VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                    return [esper.VAR_TYPE_INT64, esper.VAR_TYPE_FLOAT32, esper.VAR_TYPE_FLOAT64]
                 if(max_val > 32767) or (min_val < -32768):
-                    return [VAR_TYPE_INT32, VAR_TYPE_INT64, VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                    return [esper.VAR_TYPE_INT32, esper.VAR_TYPE_INT64, esper.VAR_TYPE_FLOAT32, esper.VAR_TYPE_FLOAT64]
                 if(max_val > 127) or (min_val < -128):
-                    return [VAR_TYPE_INT16, VAR_TYPE_INT32, VAR_TYPE_INT64, VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
-                
-                return [VAR_TYPE_INT8, VAR_TYPE_INT16, VAR_TYPE_INT32, VAR_TYPE_INT64, VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                    return [esper.VAR_TYPE_INT16, esper.VAR_TYPE_INT32, esper.VAR_TYPE_INT64, esper.VAR_TYPE_FLOAT32, esper.VAR_TYPE_FLOAT64]
+
+                return [esper.VAR_TYPE_INT8, esper.VAR_TYPE_INT16, esper.VAR_TYPE_INT32, esper.VAR_TYPE_INT64, esper.VAR_TYPE_FLOAT32, esper.VAR_TYPE_FLOAT64]
             # Unsigned number, only max matters, min = zero
             else:
                 if(max_val > 9223372036854775807):
-                    return [VAR_TYPE_UINT64, 
-                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                    return [esper.VAR_TYPE_UINT64,
+                            esper.VAR_TYPE_FLOAT32, esper.VAR_TYPE_FLOAT64]
                 if(max_val > 4294967295):
-                    return [VAR_TYPE_INT64, 
-                            VAR_TYPE_UINT64, 
-                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                    return [esper.VAR_TYPE_INT64,
+                            esper.VAR_TYPE_UINT64,
+                            esper.VAR_TYPE_FLOAT32, esper.VAR_TYPE_FLOAT64]
                 if(max_val > 2147483647):
-                    return [VAR_TYPE_INT64, 
-                            VAR_TYPE_UINT32, VAR_TYPE_UINT64, 
-                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                    return [esper.VAR_TYPE_INT64,
+                            esper.VAR_TYPE_UINT32, esper.VAR_TYPE_UINT64,
+                            esper.VAR_TYPE_FLOAT32, esper.VAR_TYPE_FLOAT64]
                 if(max_val > 65535):
-                    return [VAR_TYPE_INT32, VAR_TYPE_INT64, 
-                            VAR_TYPE_UINT32, VAR_TYPE_UINT64, 
-                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                    return [esper.VAR_TYPE_INT32, esper.VAR_TYPE_INT64,
+                            esper.VAR_TYPE_UINT32, esper.VAR_TYPE_UINT64,
+                            esper.VAR_TYPE_FLOAT32, esper.VAR_TYPE_FLOAT64]
                 if(max_val > 32767):
-                    return [VAR_TYPE_INT32, VAR_TYPE_INT64, 
-                            VAR_TYPE_UINT16, VAR_TYPE_UINT32, VAR_TYPE_UINT64, 
-                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                    return [esper.VAR_TYPE_INT32, esper.VAR_TYPE_INT64,
+                            esper.VAR_TYPE_UINT16, esper.VAR_TYPE_UINT32, esper.VAR_TYPE_UINT64,
+                            esper.VAR_TYPE_FLOAT32, esper.VAR_TYPE_FLOAT64]
                 if(max_val > 255):
-                    return [VAR_TYPE_INT16, VAR_TYPE_INT32, VAR_TYPE_INT64, 
-                            VAR_TYPE_UINT16, VAR_TYPE_UINT32, VAR_TYPE_UINT64, 
-                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                    return [esper.VAR_TYPE_INT16, esper.VAR_TYPE_INT32, esper.VAR_TYPE_INT64,
+                            esper.VAR_TYPE_UINT16, esper.VAR_TYPE_UINT32, esper.VAR_TYPE_UINT64,
+                            esper.VAR_TYPE_FLOAT32, esper.VAR_TYPE_FLOAT64]
                 if(max_val > 127):
-                    return [VAR_TYPE_INT16, VAR_TYPE_INT32, VAR_TYPE_INT64, 
-                            VAR_TYPE_UINT8, VAR_TYPE_UINT16, VAR_TYPE_UINT32, VAR_TYPE_UINT64, 
-                            VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                    return [esper.VAR_TYPE_INT16, esper.VAR_TYPE_INT32, esper.VAR_TYPE_INT64,
+                            esper.VAR_TYPE_UINT8, esper.VAR_TYPE_UINT16, esper.VAR_TYPE_UINT32, esper.VAR_TYPE_UINT64,
+                            esper.VAR_TYPE_FLOAT32, esper.VAR_TYPE_FLOAT64]
 
-                return [VAR_TYPE_INT8, VAR_TYPE_INT16, VAR_TYPE_INT32, VAR_TYPE_INT64, 
-                        VAR_TYPE_UINT8, VAR_TYPE_UINT16, VAR_TYPE_UINT32, VAR_TYPE_UINT64, 
-                        VAR_TYPE_FLOAT32, VAR_TYPE_FLOAT64]
+                return [esper.VAR_TYPE_INT8, esper.VAR_TYPE_INT16, esper.VAR_TYPE_INT32, esper.VAR_TYPE_INT64,
+                        esper.VAR_TYPE_UINT8, esper.VAR_TYPE_UINT16, esper.VAR_TYPE_UINT32, esper.VAR_TYPE_UINT64,
+                        esper.VAR_TYPE_FLOAT32, esper.VAR_TYPE_FLOAT64]
 
         return []
-
 
     def write_var(self, vid, offset, num_elements, data, var_type):
 
@@ -504,32 +456,36 @@ class EsperUDP:
             var_type  # ESPER Variable Type
         )
 
+        # If single element is passed in, convert it to a one-element array
+        if(not isinstance(data, list)):
+            data = [data]
+
         # Pack data payload according to decided var_type
-        if(var_type == VAR_TYPE_NULL):
+        if(var_type == esper.VAR_TYPE_NULL):
             data_payload = b''
-        if(var_type == VAR_TYPE_ASCII):
+        if(var_type == esper.VAR_TYPE_ASCII):
             data_payload = struct.pack("<" + str(num_elements) + "s", data)
-        if(var_type == VAR_TYPE_BOOL):
+        if(var_type == esper.VAR_TYPE_BOOL):
             data_payload = struct.pack("<" + str(num_elements) + "?", *array('B', data))
-        if(var_type == VAR_TYPE_UINT8):
+        if(var_type == esper.VAR_TYPE_UINT8):
             data_payload = struct.pack("<" + str(num_elements) + "B", *array('B', data))
-        if(var_type == VAR_TYPE_UINT16):
+        if(var_type == esper.VAR_TYPE_UINT16):
             data_payload = struct.pack("<" + str(num_elements) + "H", *array('H', data))
-        if(var_type == VAR_TYPE_UINT32):
+        if(var_type == esper.VAR_TYPE_UINT32):
             data_payload = struct.pack("<" + str(num_elements) + "I", *array('I', data))
-        if(var_type == VAR_TYPE_UINT64):
+        if(var_type == esper.VAR_TYPE_UINT64):
             data_payload = struct.pack("<" + str(num_elements) + "Q", *array('Q', data))
-        if(var_type == VAR_TYPE_INT8):
+        if(var_type == esper.VAR_TYPE_INT8):
             data_payload = struct.pack("<" + str(num_elements) + "b", *array('b', data))
-        if(var_type == VAR_TYPE_INT16):
+        if(var_type == esper.VAR_TYPE_INT16):
             data_payload = struct.pack("<" + str(num_elements) + "h", *array('h', data))
-        if(var_type == VAR_TYPE_INT32):
+        if(var_type == esper.VAR_TYPE_INT32):
             data_payload = struct.pack("<" + str(num_elements) + "i", *array('i', data))
-        if(var_type == VAR_TYPE_INT64):
+        if(var_type == esper.VAR_TYPE_INT64):
             data_payload = struct.pack("<" + str(num_elements) + "q", *array('q', data))
-        if(var_type == VAR_TYPE_FLOAT32):
+        if(var_type == esper.VAR_TYPE_FLOAT32):
             data_payload = struct.pack("<" + str(num_elements) + "f", *array('f', data))
-        if(var_type == VAR_TYPE_FLOAT64):
+        if(var_type == esper.VAR_TYPE_FLOAT64):
             data_payload = struct.pack("<" + str(num_elements) + "d", *array('d', data))
 
         # Determine if we need to pad data payload
@@ -588,43 +544,41 @@ class EsperUDP:
         offset = 0
         while(n == 0):
             section = struct.unpack_from("<IiIHH", response.payload, offset)
-            
+
             vid = section[0]
             err = section[1]
             read_offset = section[2]
             num_elements = section[3]
             var_type = section[4]
 
-            print(len(response.payload))
-
-            data_len = num_elements * EsperGetTypeSize(var_type)
+            data_len = num_elements * esper.EsperGetTypeSize(var_type)
             # TODO: Make this into a read_var class response
             offset = offset + 16
-            if(var_type == VAR_TYPE_NULL):
+            if(var_type == esper.VAR_TYPE_NULL):
                 data = []
-            if(var_type == VAR_TYPE_ASCII):
+            if(var_type == esper.VAR_TYPE_ASCII):
                 data = struct.unpack_from("<" + str(num_elements) + "s", response.payload, offset)[0].decode(encoding="ascii").rstrip('\0')
-            if(var_type == VAR_TYPE_BOOL):
+            if(var_type == esper.VAR_TYPE_BOOL):
                 data = list(struct.unpack_from("<" + str(num_elements) + "?", response.payload, offset))
-            if(var_type == VAR_TYPE_UINT8):
+            if(var_type == esper.VAR_TYPE_UINT8):
                 data = list(struct.unpack_from("<" + str(num_elements) + "B", response.payload, offset))
-            if(var_type == VAR_TYPE_UINT16):
+            if(var_type == esper.VAR_TYPE_UINT16):
                 data = list(struct.unpack_from("<" + str(num_elements) + "H", response.payload, offset))
-            if(var_type == VAR_TYPE_UINT32):
+            if(var_type == esper.VAR_TYPE_UINT32):
                 data = list(struct.unpack_from("<" + str(num_elements) + "I", response.payload, offset))
-            if(var_type == VAR_TYPE_UINT64):
+            if(var_type == esper.VAR_TYPE_UINT64):
                 data = list(struct.unpack_from("<" + str(num_elements) + "Q", response.payload, offset))
-            if(var_type == VAR_TYPE_INT8):
+            if(var_type == esper.VAR_TYPE_INT8):
                 data = list(struct.unpack_from("<" + str(num_elements) + "b", response.payload, offset))
-            if(var_type == VAR_TYPE_INT16):
+            if(var_type == esper.VAR_TYPE_INT16):
                 data = list(struct.unpack_from("<" + str(num_elements) + "h", response.payload, offset))
-            if(var_type == VAR_TYPE_INT32):
+            if(var_type == esper.VAR_TYPE_INT32):
                 data = list(struct.unpack_from("<" + str(num_elements) + "i", response.payload, offset))
-            if(var_type == VAR_TYPE_INT64):
+            if(var_type == esper.VAR_TYPE_INT64):
                 data = list(struct.unpack_from("<" + str(num_elements) + "q", response.payload, offset))
-            if(var_type == VAR_TYPE_FLOAT32):
+            if(var_type == esper.VAR_TYPE_FLOAT32):
                 data = list(struct.unpack_from("<" + str(num_elements) + "f", response.payload, offset))
-            if(var_type == VAR_TYPE_FLOAT64):
+            if(var_type == esper.VAR_TYPE_FLOAT64):
                 data = list(struct.unpack_from("<" + str(num_elements) + "d", response.payload, offset))
             resp.append({
                 'id': vid,
@@ -823,10 +777,10 @@ class EsperUDP:
                 data, server = self.__client.recvfrom(1500)
             except socket.timeout:
                 raise EsperUDP.EsperUDPTimeout()
-            
+
             # Check response is not None (mismatched msg id)
             resp = self.__verify_response(request, EsperUDP.Response(data))
-            if(resp != None):
+            if(resp is not None):
                 return resp
 
             # Message was None, aka 'not the message we were waiting for'

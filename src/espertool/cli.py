@@ -7,8 +7,8 @@ import webbrowser
 import socket
 import struct
 import json
-from . import esper
-from . import esper_console
+from espertool import esper
+from espertool import console
 
 
 def set_default_subparser(self, name, args=None):
@@ -33,7 +33,6 @@ def set_default_subparser(self, name, args=None):
             for sp_name in x._name_parser_map.keys():
                 if sp_name in sys.argv[1:]:
                     subparser_found = True
-
         if not subparser_found:
             # insert default in first position, this implies no
             # global options without a sub_parsers specified
@@ -71,8 +70,8 @@ def cmd_console(args):
     (auth_token, ip, port) = parse_url(args.url)
     try:
         udp = esper.udp.EsperUDP(ip, port, int(args.timeout), auth_token)
-        console = esper_console.InteractiveMode(udp)
-        console.cmdloop()
+        interactive = console.InteractiveMode(udp)
+        interactive.cmdloop()
     except ConnectionRefusedError:
         print("Connectiong Refused " + ip + ":" + str(port))
     except esper.udp.EsperUDP.EsperUDPLinkError as e:
@@ -125,9 +124,6 @@ def cmd_var_write(args):
             args.vid = int(udp.get_var_id(path=args.vid))
 
         json_data = json.loads(args.data)
-        # If a single element is passed in, lets make it an array
-        if(not isinstance(json_data, list)):
-            json_data = [json_data]
 
         var_type_list = udp.get_var_types_available_for_data(json_data)
         var_info = udp.read_var_info(args.vid, 0)
@@ -336,7 +332,8 @@ def main():
     # Version information is gathered using setup_scm
     __version__ = "0.0.1"
     try:
-        __version__ = get_distribution(__name__).version
+        __version__ = get_distribution("espertool").version
+        pass
     except DistributionNotFound:
         # package is not installed
         pass
@@ -436,3 +433,7 @@ def main():
     # Call handler for argument
     args.func(args)
     sys.exit(0)
+
+
+if(__name__ == "__main__"):
+    main()
