@@ -332,7 +332,7 @@ def main():
     # Version information is gathered using setup_scm
     __version__ = "0.0.1"
     try:
-        __version__ = get_distribution("espertool").version
+        __version__ = get_distribution(__name__).version
         pass
     except DistributionNotFound:
         # package is not installed
@@ -433,7 +433,3 @@ def main():
     # Call handler for argument
     args.func(args)
     sys.exit(0)
-
-
-if(__name__ == "__main__"):
-    main()
